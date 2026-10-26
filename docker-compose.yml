@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: pdca_admin
+      POSTGRES_PASSWORD: pdca_senha_local_123
+      POSTGRES_DB: pdca_financeiro
+    ports:
+      - "5432:5432"
+    volumes:
+      - pdca_pgdata:/var/lib/postgresql/data
+
+volumes:
+  pdca_pgdata:

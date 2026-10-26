@@ -1,0 +1,250 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PerfilUsuario {
+  SOLICITANTE
+  ANALISTA_FINANCEIRO
+  GESTOR_FINANCEIRO
+  ADMINISTRADOR_SISTEMA
+}
+
+enum TipoAuditoriaAdministrativa {
+  USUARIO_CRIADO
+  USUARIO_STATUS_ALTERADO
+  USUARIO_ARQUIVADO
+  USUARIO_PERFIL_ALTERADO
+}
+
+model Usuario {
+  id             String        @id @default(uuid())
+  nome           String
+  email          String        @unique
+  senhaHash      String
+  perfil         PerfilUsuario @default(SOLICITANTE)
+  diretoria      String?
+  cargo          String?
+  ativo          Boolean       @default(true)
+  arquivado      Boolean       @default(false)
+  arquivadoEm    DateTime?
+  arquivadoPorId String?
+  criadoEm       DateTime      @default(now())
+  atualizadoEm   DateTime      @updatedAt
+
+  solicitacoes  Solicitacao[]
+
+  solicitacoesAnalise   Solicitacao[] @relation("SolicitacoesAnalise")
+  solicitacoesDecisao   Solicitacao[] @relation("SolicitacoesDecisao")
+  solicitacoesExecucao  Solicitacao[] @relation("SolicitacoesExecucao")
+
+  eventosRegistrados  HistoricoEvento[]
+  documentosEnviados  Documento[]
+  pareceresEmitidos   Parecer[]
+  modelosCriados      ModeloDocumento[]
+  notificacoes        Notificacao[]
+
+  auditoriasRealizadas AuditoriaAdministrativa[] @relation("AuditoriasRealizadas")
+  auditoriasRecebidas  AuditoriaAdministrativa[] @relation("AuditoriasRecebidas")
+
+  @@map("usuarios")
+}
+
+enum TipoSolicitacao {
+  VERBA
+  CUSTEIO
+  REEMBOLSO
+}
+
+enum StatusSolicitacao {
+  RASCUNHO
+  ENVIADA
+  EM_ANALISE
+  CORRECAO_SOLICITADA
+  REENVIADA
+  APROVADA
+  EXECUTADA_PAGA
+  ENCERRADA
+  REJEITADA
+  CANCELADA
+}
+
+model Solicitacao {
+  id              String            @id @default(uuid())
+  numero          String            @unique
+  tipo            TipoSolicitacao
+  titulo          String
+  descricao       String
+  valorSolicitado Decimal           @db.Decimal(12, 2)
+  valorAprovado   Decimal?          @db.Decimal(12, 2)
+  valorExecutado  Decimal?          @db.Decimal(12, 2)
+  status          StatusSolicitacao @default(RASCUNHO)
+  arquivada       Boolean           @default(false)
+
+  solicitanteId   String
+  solicitante     Usuario           @relation(fields: [solicitanteId], references: [id])
+
+    responsavelAnaliseId  String?
+  responsavelAnalise    Usuario? @relation("SolicitacoesAnalise", fields: [responsavelAnaliseId], references: [id])
+
+  responsavelDecisaoId  String?
+  responsavelDecisao    Usuario? @relation("SolicitacoesDecisao", fields: [responsavelDecisaoId], references: [id])
+
+  responsavelExecucaoId String?
+  responsavelExecucao   Usuario? @relation("SolicitacoesExecucao", fields: [responsavelExecucaoId], references: [id])
+
+  criadoEm        DateTime          @default(now())
+  atualizadoEm    DateTime          @updatedAt
+
+  historico       HistoricoEvento[]
+  documentos      Documento[]
+  pareceres       Parecer[]
+
+  @@map("solicitacoes")
+}
+
+enum TipoEventoHistorico {
+  CRIACAO
+  EDICAO
+  ENVIO
+  INICIO_ANALISE
+  SOLICITACAO_CORRECAO
+  REENVIO
+  MUDANCA_STATUS
+  PARECER_EMITIDO
+  APROVACAO
+  REJEICAO
+  CANCELAMENTO
+  REGISTRO_EXECUCAO_PAGAMENTO
+  ENCERRAMENTO
+  REABERTURA
+  UPLOAD_DOCUMENTO
+}
+
+model HistoricoEvento {
+  id              String              @id @default(uuid())
+  tipo            TipoEventoHistorico
+  descricao       String
+  statusAnterior  StatusSolicitacao?
+  statusNovo      StatusSolicitacao?
+
+  solicitacaoId   String
+  solicitacao     Solicitacao         @relation(fields: [solicitacaoId], references: [id])
+
+  responsavelId   String
+  responsavel     Usuario             @relation(fields: [responsavelId], references: [id])
+
+  criadoEm        DateTime            @default(now())
+
+  @@map("historico_eventos")
+}
+
+enum TipoDocumento {
+  TERMO_SOLICITACAO
+  ORCAMENTO
+  COMPROVANTE
+  RECIBO
+  EXTRATO
+  DOCUMENTO_FISCAL
+  PARECER_ANEXO
+  OUTRO
+}
+
+model Documento {
+  id              String        @id @default(uuid())
+  nomeArquivo     String
+  caminhoArquivo  String
+  tipo            TipoDocumento
+  versao          Int           @default(1)
+
+  solicitacaoId   String
+  solicitacao     Solicitacao   @relation(fields: [solicitacaoId], references: [id])
+
+  enviadoPorId    String
+  enviadoPor      Usuario       @relation(fields: [enviadoPorId], references: [id])
+
+  criadoEm        DateTime      @default(now())
+
+  @@map("documentos")
+}
+
+model Parecer {
+  id              String       @id @default(uuid())
+  conclusao       String
+  observacoes     String?
+  arquivoAnexo    String?
+  versaoAnterior  String?
+
+  solicitacaoId   String
+  solicitacao     Solicitacao  @relation(fields: [solicitacaoId], references: [id])
+
+  emitidoPorId    String
+  emitidoPor      Usuario      @relation(fields: [emitidoPorId], references: [id])
+
+  criadoEm        DateTime     @default(now())
+
+  @@map("pareceres")
+}
+
+model ModeloDocumento {
+  id            String   @id @default(uuid())
+  nome          String
+  descricao     String?
+  versao        Int      @default(1)
+  arquivado     Boolean  @default(false)
+  caminhoArquivo String
+
+  criadoPorId   String
+  criadoPor     Usuario @relation(fields: [criadoPorId], references: [id])
+
+  criadoEm      DateTime @default(now())
+
+  @@map("modelos_documento")
+}
+
+model Notificacao {
+  id            String    @id @default(uuid())
+  mensagem      String
+  lida          Boolean   @default(false)
+
+  usuarioId     String
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id])
+
+  solicitacaoId String?
+
+  criadoEm      DateTime  @default(now())
+
+  @@map("notificacoes")
+}
+
+model AuditoriaAdministrativa {
+  id                 String                     @id @default(uuid())
+  tipo               TipoAuditoriaAdministrativa
+  descricao          String
+  dadosAnteriores    Json?
+  dadosPosteriores   Json?
+
+  responsavelId      String
+  responsavel        Usuario                    @relation("AuditoriasRealizadas", fields: [responsavelId], references: [id])
+
+  usuarioAlvoId      String
+  usuarioAlvo        Usuario                    @relation("AuditoriasRecebidas", fields: [usuarioAlvoId], references: [id])
+
+  criadoEm           DateTime                   @default(now())
+
+  @@index([criadoEm])
+  @@index([usuarioAlvoId])
+  @@index([responsavelId])
+  @@map("auditorias_administrativas")
+}
